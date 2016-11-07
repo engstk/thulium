@@ -72,7 +72,7 @@ enum oem_boot_mode{
 /*------------------------------------------------Global Define--------------------------------------------*/
 #define TP_TEST_ENABLE 1
 #define TPD_NAME "synaptics"
-#define TPD_DEVICE "synaptics,s1302"
+#define TPD_DEVICE "HWK,synaptics,s1302"
 #define LOG_TAG		"touchkey,s1302"
 
 #define SUPPORT_TP_SLEEP_MODE
@@ -295,6 +295,8 @@ struct synaptics_ts_data {
 	char fw_name[TP_FW_NAME_MAX_LEN];
 	char fw_id[12];
 	char manu_name[12];
+
+	struct work_struct pm_work;
 
 	bool stop_keypad;
 };
@@ -1777,6 +1779,18 @@ static void synaptics_hard_reset(struct synaptics_ts_data *ts)
     }
 
 }
+
+static void synaptics_suspend_resume(struct work_struct *work)
+{
+	struct synaptics_ts_data *ts =
+		container_of(work, typeof(*ts), pm_work);
+
+	if (ts->suspended)
+		synaptics_ts_suspend(&ts->client->dev);
+	else
+		synaptics_ts_resume(&ts->client->dev);
+}
+
 static int synaptics_parse_dts(struct device *dev, struct synaptics_ts_data *ts)
 {
 	int rc;
@@ -2032,6 +2046,9 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 	if(ret < 0) {
 		TPD_ERR("synaptics_input_init failed!\n");
 	}
+
+	INIT_WORK(&ts->pm_work, synaptics_suspend_resume);
+
 #if defined(CONFIG_FB)
 	ts->suspended = 0;
 	ts->fb_notif.notifier_call = fb_notifier_callback;
@@ -2188,30 +2205,30 @@ ERR_RESUME:
 #if defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
+	struct synaptics_ts_data *ts =
+		container_of(self, struct synaptics_ts_data, fb_notif);
 	struct fb_event *evdata = data;
-	int *blank;
+	int *blank = evdata->data;
 
-	struct synaptics_ts_data *ts = container_of(self, struct synaptics_ts_data, fb_notif);
+	if (event != FB_EVENT_BLANK)
+		return NOTIFY_OK;
 
-	if(FB_EVENT_BLANK != event)
-	return 0;
-	if((evdata) && (evdata->data) && (ts) && (ts->client)&&(event == FB_EVENT_BLANK)) {
-		blank = evdata->data;
-		if( *blank == FB_BLANK_UNBLANK || *blank == FB_BLANK_NORMAL) {
-			TPD_DEBUG("%s going TP resume\n", __func__);
-			if(ts->suspended == 1){
-				ts->suspended = 0;
-				synaptics_ts_resume(&ts->client->dev);
-			}
-		} else if( *blank == FB_BLANK_POWERDOWN) {
-			TPD_DEBUG("%s : going TP suspend\n", __func__);
-			if(ts->suspended == 0) {
-				ts->suspended = 1;
-				synaptics_ts_suspend(&ts->client->dev);
-			}
+	switch (*blank) {
+	case FB_BLANK_UNBLANK:
+	case FB_BLANK_NORMAL:
+		if (ts->suspended) {
+			ts->suspended = 0;
+			queue_work(system_highpri_wq, &ts->pm_work);
+		}
+		break;
+	case FB_BLANK_POWERDOWN:
+		if (!ts->suspended) {
+			ts->suspended = 1;
+			queue_work(system_highpri_wq, &ts->pm_work);
 		}
 	}
-	return 0;
+
+	return NOTIFY_OK;
 }
 #endif
 
