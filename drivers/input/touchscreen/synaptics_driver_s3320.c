@@ -1371,13 +1371,11 @@ void int_touch(void)
 	}
 	input_sync(ts->input_dev);
 
-#if 0
 	if ((finger_num == 0) && (get_tp_base == 0)){//all finger up do get base once
 		get_tp_base = 1;
 		TPD_ERR("start get base data:%d\n",get_tp_base);
 		tp_baseline_get(ts, false);
 	}
-#endif
 
 #ifdef SUPPORT_GESTURE
 	if (ts->in_gesture_mode == 1 && ts->is_suspended == 1) {
@@ -3936,10 +3934,7 @@ static int fb_notifier_callback(struct notifier_block *self, unsigned long event
             {
                 TPD_DEBUG("%s going TP resume start\n", __func__);
                 ts->is_suspended = 0;
-		if (ts->gesture_enable)
-			synaptics_enable_interrupt_for_gesture(ts, false);
-		atomic_set(&ts->is_stop, 0);
-		touch_enable(ts);
+				queue_delayed_work(get_base_report, &ts->base_work,msecs_to_jiffies(1));
 				synaptics_ts_resume(&ts->client->dev);
                 //atomic_set(&ts->is_stop,0);
                 TPD_DEBUG("%s going TP resume end\n", __func__);
