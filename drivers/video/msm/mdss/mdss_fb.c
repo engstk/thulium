@@ -844,6 +844,9 @@ static ssize_t mdss_fb_set_max_brightness(struct device *dev,
 	return count;
 }
 
+static DEVICE_ATTR(hbm, S_IRUGO | S_IWUSR,
+	mdss_fb_get_max_brightness, mdss_fb_set_max_brightness);
+
 static ssize_t mdss_fb_get_srgb_mode(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -882,10 +885,9 @@ static ssize_t mdss_fb_set_srgb_mode(struct device *dev,
 
 	return count;
 }
+
 static DEVICE_ATTR(SRGB, S_IRUGO | S_IWUSR,
 	mdss_fb_get_srgb_mode, mdss_fb_set_srgb_mode);
-static DEVICE_ATTR(hbm, S_IRUGO | S_IWUSR,
-	mdss_fb_get_max_brightness, mdss_fb_set_max_brightness);
 // Also export hbm as sre, as this is what user space expects
 static DEVICE_ATTR(sre, S_IRUGO | S_IWUSR,
 	mdss_fb_get_max_brightness, mdss_fb_set_max_brightness);
